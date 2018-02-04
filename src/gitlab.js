@@ -71,6 +71,14 @@ export const getCommits = (projectId, branchName) => {
   return fitch.preparedGet(`/projects/${projectId}/repository/commits/${('' + branchName).replace(/\//g, '%2F')}`)
 }
 
+export const getJobs = (projectId, pipelineId) => {
+  console.info('getJobs', projectId, pipelineId)
+  if (projectId == null || pipelineId == null) {
+    return Promise.reject(new Error('projectId or pipelineId are empty'))
+  }
+  return fitch.preparedGet(`/projects/${projectId}/pipelines/${pipelineId}/jobs`)
+}
+
 export default {
   setBaseData
 }

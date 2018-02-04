@@ -7,7 +7,8 @@ import {
   getTags,
   getPipelines,
   getPipeline,
-  getCommits
+  getCommits,
+  getJobs
 } from '@/gitlab'
 
 jest.mock('fitch', () => ({
@@ -44,7 +45,7 @@ jest.mock('fitch', () => ({
         url,
         type: 'tags'
       }
-    } else if (url.indexOf('pipelines') > 0) {
+    } else if (url.indexOf('pipelines') > 0 && url.indexOf('jobs') === -1) {
       result = {
         url,
         type: 'pipelines'
@@ -53,6 +54,11 @@ jest.mock('fitch', () => ({
       result = {
         url,
         type: 'commits'
+      }
+    } else if (url.indexOf('jobs') > 0) {
+      result = {
+        url,
+        type: 'jobs'
       }
     }
     return Promise.resolve(result)
@@ -142,6 +148,12 @@ describe('gitlab', () => {
   test('should dont return pipeline', (done) => {
     getPipeline().catch((err) => {
       expect(typeof err).toEqual('object')
+      done()
+    })
+  })
+  test('should returns jobs', (done) => {
+    getJobs(0, 2).then((data) => {
+      expect(data.type).toEqual('jobs')
       done()
     })
   })

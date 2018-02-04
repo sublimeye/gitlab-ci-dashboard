@@ -185,23 +185,13 @@ var root = new Vue({
       }
       this.repositories = repositories
     },
-    loadProjects (repos) {
-      this.loadRepositories(repos)
-      this.setupDefaults(gitlabApi)
-      this.fetchProjects()
-      setInterval(() => {
-        this.handlerError()
-        this.fetchProjects()
-      }, this.interval * 1000)
-      this.handlerStatus()
-    },
     startup () {
       if (!this.configValid()) {
         this.onInvalid = true
         return
       }
 
-      console.info('init')
+      console.info('[DOC] Is valid config?')
       if (this.standalone || Array.isArray(this.projects)) {
         console.info('standalone or this.projes is array')
         this.loadProjects(this.projects)
@@ -217,6 +207,129 @@ var root = new Vue({
         console.info('projects from file')
         getProjectsFromFile(this.projectsFile).then(projects => this.loadProjects(projects))
       }
+    },
+    loadProjects (repos) {
+      console.info('[DOC] load projects')
+      this.loadRepositories(repos)
+      this.setupDefaults(gitlabApi)
+      this.fetchProjects()
+      setInterval(() => {
+        this.handlerError()
+        this.fetchProjects()
+      }, this.interval * 1000)
+      this.handlerStatus()
+    },
+    fetchProjects (page) {
+      const {
+        repositories
+      } = this
+      if (!repositories) {
+        return
+      }
+
+      repositories.forEach((repo) => {
+        this.onLoading = true
+        console.info('[DOC] getProjects')
+        getProjects(repo.nameWithNamespace)
+          .then((response) => {
+            console.info('[DOC] getProjects - success')
+            this.onLoading = false
+            if (this.apiVersion === DEFAULT_API_VERSION) {
+              this.fetchBuilds({repo, project: response.data})
+                .then(this.loadBuilds.bind(this))
+            } else {
+              this.fetchPipelines({repo, project: response.data})
+            }
+          })
+          .catch((err) => {
+            err.project = repo.nameWithNamespace
+            this.handlerError(err)
+          })
+      })
+    },
+    fetchPipelines (selectedProject) {
+      var updated = false
+      if (!selectedProject) {
+        return Promise.reject(Error('project is empty'))
+      }
+      console.info('[DOC] fetchPipelines')
+      const {
+        repo,
+        project
+      } = selectedProject
+      console.info('[DOC] getCommits')
+      return getCommits(project.id, repo.branch).then(({data}) => {
+        const {
+          message
+        } = data
+        console.info('[DOC] getCommits - success', data.last_pipeline)
+        const authorName = data['author_name']
+        // const lastPipelineId = data['last_pipeline'].id
+        console.info('[DOC] getTags')
+        return getTags(project.id)
+          .then((response) => {
+            console.info('[DOC] getTags - success')
+            const tag = getTopItem(response.data)
+            console.info('[DOC] getPipeline')
+            return getPipeline(project.id, lastPipelineId)
+              .then((pipeline) => {
+                console.info('[DOC] getPipeline - success')
+                const lastPipeline = pipeline.data
+                this.onBuilds.forEach((build) => {
+                  if (
+                    build.project === repo.projectName &&
+                    build.branch === repo.branch
+                  ) {
+                    updated = true
+                    if (lastPipeline.status !== build.status) {
+                      this.addStatusQueue(build.status, DECREASE_ACTION)
+                      this.addStatusQueue(lastPipeline.status, INCREASE_ACTION)
+                    }
+                    build.project = repo.projectName
+                    build.status = lastPipeline.status
+                    build.lastStatus = build.status
+                    build.id = lastPipeline.id
+                    build.projectId = project.id
+                    build.pipelineId = lastPipeline.id
+                    build.started_at = moment(lastPipeline.started_at).fromNow()
+                    build.author = authorName
+                    build.commit_message = message
+                    build.project_path = 'b.project_path'
+                    build.branch = repo.branch
+                    build.tag_name = tag && tag.name
+                    build.namespace_name = project.namespace.name
+                    build.link_to_branch = this.getLinkToBranch(project, repo)
+                  }
+                  console.info(8)
+                  return Promise.resolve(build)
+                })
+                if (!updated) {
+                  this.addStatusQueue(lastPipeline.status, INCREASE_ACTION)
+                  let buildToAdd = {}
+                  buildToAdd.project = repo.projectName
+                  buildToAdd.status = lastPipeline.status
+                  buildToAdd.lastStatus = buildToAdd.status
+                  buildToAdd.id = lastPipeline.id
+                  buildToAdd.projectId = project.id
+                  buildToAdd.pipelineId = lastPipeline.id
+                  buildToAdd.started_at = moment(lastPipeline.started_at).fromNow()
+                  buildToAdd.author = authorName
+                  buildToAdd.commit_message = message
+                  buildToAdd.project_path = 'buildToAdd.project_path'
+                  buildToAdd.branch = repo.branch
+                  buildToAdd.tag_name = tag && tag.name
+                  buildToAdd.namespace_name = project.namespace.name
+                  buildToAdd.link_to_branch = this.getLinkToBranch(project, repo)
+                  this.onBuilds.push(buildToAdd)
+                  console.info(9)
+                  return Promise.resolve(buildToAdd)
+                }
+              })
+              .catch(this.handlerError.bind(this))
+          })
+          .catch(this.handlerError.bind(this))
+      })
+        .catch(this.handlerError.bind(this))
     },
     handlerError (error) {
       if (error == null) {
@@ -290,32 +403,6 @@ var root = new Vue({
       } = this
       provider.setBaseData(gitlab, token, gitlabciProtocol, apiVersion)
     },
-    fetchProjects (page) {
-      const {
-        repositories
-      } = this
-      if (!repositories) {
-        return
-      }
-
-      repositories.forEach((repo) => {
-        this.onLoading = true
-        getProjects(repo.nameWithNamespace)
-          .then((response) => {
-            this.onLoading = false
-            if (this.apiVersion === DEFAULT_API_VERSION) {
-              this.fetchBuilds({repo, project: response.data})
-                .then(this.loadBuilds.bind(this))
-            } else {
-              this.fetchPipelines({repo, project: response.data})
-            }
-          })
-          .catch((err) => {
-            err.project = repo.nameWithNamespace
-            this.handlerError(err)
-          })
-      })
-    },
     addStatusQueue (status, action) {
       this.statusQueue.push({
         status,
@@ -342,7 +429,7 @@ var root = new Vue({
         return
       }
       const selectedItem = s[0]
-      if (statusItem.action === INCREASE_ACTION) {
+      if (statusItem.action === INCREASE_ACTON) {
         selectedItem.total++
       } else if (statusItem.action === DECREASE_ACTION) {
         selectedItem.total--
@@ -384,6 +471,8 @@ var root = new Vue({
           b.tag_name = tag && tag.name
           b.namespace_name = project.namespace.name
           b.link_to_branch = this.getLinkToBranch(project, repo)
+          b.pipeline = build.pipeline
+          b.gitlabProject = project
         }
       }
 
@@ -401,79 +490,12 @@ var root = new Vue({
           branch: repo.branch,
           tag_name: tag && tag.name,
           namespace_name: project.namespace.name,
-          link_to_branch: this.getLinkToBranch(project, repo)
+          link_to_branch: this.getLinkToBranch(project, repo),
+          pipeline: build.pipeline,
+          gitlabProject: project
         }
         onBuilds.push(buildToAdd)
       }
-    },
-    fetchPipelines (selectedProject) {
-      var updated = false
-      if (!selectedProject) {
-        return
-      }
-      const {
-        repo,
-        project
-      } = selectedProject
-      getCommits(project.id, repo.branch).then(({data}) => {
-        const {
-          message
-        } = data
-        const authorName = data['author_name']
-        const lastPipelineId = data['last_pipeline'].id
-        getTags(project.id)
-          .then((response) => {
-            const tag = getTopItemByName(response.data)
-            getPipeline(project.id, lastPipelineId)
-              .then((pipeline) => {
-                const lastPipeline = pipeline.data
-                this.onBuilds.forEach((build) => {
-                  if (
-                    build.project === repo.projectName &&
-                    build.branch === repo.branch
-                  ) {
-                    updated = true
-                    if (lastPipeline.status !== build.status) {
-                      this.addStatusQueue(build.status, DECREASE_ACTION)
-                      this.addStatusQueue(lastPipeline.status, INCREASE_ACTION)
-                    }
-                    build.project = repo.projectName
-                    build.status = lastPipeline.status
-                    build.lastStatus = build.status
-                    build.id = lastPipeline.id
-                    build.started_at = moment(lastPipeline.started_at).fromNow()
-                    build.author = authorName
-                    build.commit_message = message
-                    build.project_path = 'b.project_path'
-                    build.branch = repo.branch
-                    build.tag_name = tag && tag.name
-                    build.namespace_name = project.namespace.name
-                    build.link_to_branch = this.getLinkToBranch(project, repo)
-                  }
-                })
-                if (!updated) {
-                  this.addStatusQueue(lastPipeline.status, INCREASE_ACTION)
-                  let buildToAdd = {}
-                  buildToAdd.project = repo.projectName
-                  buildToAdd.status = lastPipeline.status
-                  buildToAdd.lastStatus = buildToAdd.status
-                  buildToAdd.id = lastPipeline.id
-                  buildToAdd.started_at = moment(lastPipeline.started_at).fromNow()
-                  buildToAdd.author = authorName
-                  buildToAdd.commit_message = message
-                  buildToAdd.project_path = 'buildToAdd.project_path'
-                  buildToAdd.branch = repo.branch
-                  buildToAdd.tag_name = tag && tag.name
-                  buildToAdd.namespace_name = project.namespace.name
-                  buildToAdd.link_to_branch = this.getLinkToBranch(project, repo)
-                  this.onBuilds.push(buildToAdd)
-                }
-              })
-              .catch(this.handlerError.bind(this))
-          })
-          .catch(this.handlerError.bind(this))
-      })
-        .catch(this.handlerError.bind(this))
     },
     handlerBranch (onBuilds, repo, project, lastCommit) {
       return getBuilds(project.id, lastCommit)

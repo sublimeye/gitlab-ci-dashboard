@@ -17,7 +17,7 @@ jest.mock('@/utils', () => ({
   },
   getTopItem: (param) => {
     return {
-      id: 0,
+      id: 1,
       status: 'running',
       commit: {
         author_name: 'Author',
@@ -32,7 +32,7 @@ jest.mock('@/gitlab', () => ({
     Promise.resolve({
       data: {
         commit: {
-          id: 0
+          id: 1
         }
       }
     })
@@ -40,17 +40,28 @@ jest.mock('@/gitlab', () => ({
   getBuilds: () => (
     Promise.resolve({
       data: [
-        {id: 0},
-        {id: 1}
+        {id: 1, name: 'one'},
+        {id: 2, name: 'two'}
       ]
     })
   ),
   getTags: () => (
     Promise.resolve({
       data: [
-        {id: 0},
-        {id: 1}
+        {id: 1, name: 'one'},
+        {id: 2, name: 'two'}
       ]
+    })
+  ),
+  getCommits: () => (
+    Promise.resolve({
+      data: {
+        message: 'message',
+        author_name: 'a',
+        last_pipeline: {
+          id: 1
+        }
+      }
     })
   ),
   getProjects: () => {
@@ -59,7 +70,15 @@ jest.mock('@/gitlab', () => ({
         id: 1
       }
     })
-  }
+  },
+  getPipeline: () => (
+    Promise.resolve({
+      data: {
+        id: 1,
+        status: 'status'
+      }
+    })
+  )
 }))
 
 const mockedBuilds = [
@@ -132,6 +151,9 @@ const mockedTag = {
   name: 'tag1'
 }
 
+let vm2 = null
+let vmMethods = null
+
 describe('main.js', () => {
   describe('Sorted Builds', () => {
     const vm = RootMain.$mount()
@@ -167,7 +189,9 @@ describe('main.js', () => {
     })
   })
   describe('handlerError', () => {
-    const vm2 = RootMain.$mount()
+    beforeEach(() => {
+      vm2 = RootMain.$mount()
+    })
     it('Should load params from stadalone mode', () => {
       expect(vm2.projectsFile).toEqual('standalone')
     })
@@ -200,7 +224,9 @@ describe('main.js', () => {
     })
   })
   describe('methods', () => {
-    const vmMethods = RootMain.$mount()
+    beforeEach(() => {
+      vmMethods = RootMain.$mount()
+    })
     it('Should load config all params', (done) => {
       vmMethods.loadConfig().then(() => {
         expect(vmMethods.standalone).toEqual(true)
@@ -252,6 +278,39 @@ describe('main.js', () => {
       }
       const url = vmMethods.getLinkToBranch(mockedProject, mockedRepo)
       expect(url).toEqual('gitlabciProtocol://gitlab/n1/p1/tree/b1')
+    })
+    /* Deveria carregar as pipelines*/
+    it('===>', async () => {
+      const repo = {
+        nameWithNamespace: 'a/b',
+        projectName: 'b',
+        branch: 'c'
+      }
+      const project = {
+        id: 1,
+        name: 'b',
+        namespace: {
+          name: 'a'
+        },
+        path_with_namespace: 'a/b'
+      }
+      const r = await vmMethods.fetchPipelines({
+        repo,
+        project
+      })
+      expect(r).not.toBeNull()
+      expect(vmMethods.onBuilds.length).toEqual(2)
+      expect(r.project).toEqual('b')
+      expect(r.status).toEqual('status')
+      expect(r.lastStatus).toEqual('status')
+      expect(r.id).toEqual(1)
+      expect(r.projectId).toEqual(1)
+      expect(r.pipelineId).toEqual(1)
+      expect(r.started_at).toEqual('a few seconds ago')
+      expect(r.author).toEqual('a')
+      expect(r.commit_message).toEqual('message')
+      expect(r.project_path).toEqual('buildToAdd.project_path')
+      expect(r.branch).toEqual('c')
     })
   })
 })

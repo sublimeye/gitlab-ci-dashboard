@@ -2,8 +2,7 @@ const cmp = require('semver-compare')
 
 import {CREATED, MANUAL, SKIPPED} from './status'
 
-export const getParameterByName = (name, url) => {
-  if (!url) url = window.location.href
+export const getParameterByName = (name, url = window.location.href) => {
   name = name.replace(/[[]]/g, '\\$&')
   var regex = new RegExp('[?&]' + name + '(=([^&#]*)|&|#|$)')
   var results = regex.exec(url)

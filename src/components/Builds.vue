@@ -8,6 +8,9 @@
           v-bind:class="statusClass(build)"
         >
           <div class="content">
+            <p>
+              {{ JSON.stringify(build) }}
+            </p>
             <div class="header project-name">
               <a target="_blank" v-bind:href="build.link_to_branch">{{ build.project }} ({{ build.branch }})</a>
             </div>
@@ -24,6 +27,7 @@
                 {{ build.tag_name }}
               </h1>
             </div>
+            <pipeline :project="build.gitlabProject" :pipeline="build.pipeline" />
           </div>
           <div class="extra content">
             <span class="left floated hashtag build-id">
@@ -44,9 +48,18 @@
 </template>
 
 <script>
+  import Pipeline from './Pipeline'
   export default {
     name: 'builds',
-    props: ['onBuilds', 'sortedBuilds', 'hideSuccessCards', 'hideVersion'],
+    props: [
+      'onBuilds',
+      'sortedBuilds',
+      'hideSuccessCards',
+      'hideVersion'
+    ],
+    components: {
+      Pipeline
+    },
     data () {
       return {
         gitlab: ''
