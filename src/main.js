@@ -420,8 +420,10 @@ var root = new Vue({
         const {
           message,
           author_name: authorName,
-          last_pipeline: {id: lastPipelineId}
+          last_pipeline: lastPipeline
         } = data
+        const lastPipelineId = lastPipeline && lastPipeline.id
+        if (!lastPipelineId) return true
         getTags(project.id)
           .then((response) => {
             const tag = getTopItemByName(response.data)

@@ -41,5 +41,10 @@ export const getTopItemByName = (list) => {
   if (!Array.isArray(list) || list.length === 0) {
     return
   }
-  return sort.desc(list).shift()
+
+  return list.sort(sortByCommitDate)[0]
+}
+
+function sortByCommitDate(a = {}, b = {}) {
+  return a.commit && a.commit.committed_date < b.commit && b.commit.committed_date
 }

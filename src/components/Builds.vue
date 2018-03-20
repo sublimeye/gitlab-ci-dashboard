@@ -4,7 +4,7 @@
       <div class="ui stackable cards">
         <div
           v-for="build in sortedBuilds"
-          v-bind:key="build.id"
+          v-bind:key="build.id + build.branch"
           v-bind:class="statusClass(build)"
         >
           <div class="content">
